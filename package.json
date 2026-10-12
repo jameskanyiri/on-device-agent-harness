@@ -4,12 +4,23 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.21",
+    "@react-native-masked-view/masked-view": "0.3.2",
+    "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.26",
+    "expo-blur": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.20",
+    "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.4",
+    "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
+    "expo-image-manipulator": "~57.0.20",
+    "expo-image-picker": "~57.0.20",
+    "expo-keep-awake": "~57.0.2",
+    "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.11",
     "expo-router": "~57.0.24",
     "expo-splash-screen": "~57.0.9",
@@ -20,24 +31,52 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-audio-api": "^0.13.6",
+    "react-native-blob-util": "^0.24.12",
+    "react-native-enriched-markdown": "^1.1.0",
+    "react-native-executorch": "^0.10.4",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "remend": "^1.4.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "ios:release": "npm run dashboard:env && expo run:ios --device --configuration Release",
+    "dashboard:env": "echo \"EXPO_PUBLIC_DASHBOARD_URL=http://$(scutil --get LocalHostName).local:8787\" > .env.local"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "react-native-executorch@0.10.4": true,
+    "react-native-enriched-markdown@1.1.0": true,
+    "@shopify/react-native-skia@2.6.2": true
+  },
+  "enriched-markdown": {
+    "enableCodeHighlight": true,
+    "enableMath": true,
+    "enableVideo": false,
+    "codeHighlightLanguages": [
+      "javascript",
+      "typescript",
+      "tsx",
+      "python",
+      "json",
+      "bash",
+      "swift"
+    ]
+  }
 }

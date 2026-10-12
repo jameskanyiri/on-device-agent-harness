@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["DeviceMetricsModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.devicemetrics.DeviceMetricsModule"]
+  }
+}

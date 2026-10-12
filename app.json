@@ -8,7 +8,15 @@
     "scheme": "ondeviceai",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.jkanyiri.ondeviceai",
+      "appleTeamId": "67LVQ2FGUZ",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connects to the benchmark driver on your Mac to run on-device model benchmarks.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,6 +39,34 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0",
+            "enableSceneSupport": true
+          },
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "react-native-audio-api",
+        {
+          "iosBackgroundMode": false,
+          "iosMicrophonePermission": "Voice input is transcribed on this iPhone. Audio never leaves the device.",
+          "disableFFmpeg": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos for the on-device vision model to look at. Photos never leave this iPhone.",
+          "cameraPermission": "Take a photo for the on-device vision model to look at. Photos never leave this iPhone.",
+          "microphonePermission": "Voice input is transcribed on this iPhone. Audio never leaves the device."
         }
       ]
     ],
