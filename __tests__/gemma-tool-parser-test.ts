@@ -1,0 +1,64 @@
+import { GEMMA_TOOL_STOP, parseGemmaToolCalls, visibleReplyText } from '@/harness/gemma-tool-parser';
+
+const Q = '<|"|>';
+const call = (body: string) => `<|tool_call>call:${body}<tool_call|>`;
+
+describe('parseGemmaToolCalls', () => {
+  it('returns nothing for a plain reply', () => {
+    expect(parseGemmaToolCalls('Nairobi is the capital of Kenya.')).toBeUndefined();
+  });
+
+  it('parses a call with string and number arguments', () => {
+    const result = parseGemmaToolCalls(`${call(`read_file{file_path:${Q}/notes.md${Q},limit:50}`)}<|tool_response>`);
+    expect(result?.toolCalls).toHaveLength(1);
+    expect(result?.toolCalls[0]!.function).toEqual({ name: 'read_file', arguments: { file_path: '/notes.md', limit: 50 } });
+    expect(result?.textContent).toBeUndefined();
+  });
+
+  it('keeps text before the calls and parses several calls', () => {
+    const result = parseGemmaToolCalls(`Let me check.${call(`ls{path:${Q}/${Q}}`)}${call(`glob{pattern:${Q}**/*.md${Q}}`)}`);
+    expect(result?.textContent).toBe('Let me check.');
+    expect(result?.toolCalls.map((c) => c.function.name)).toEqual(['ls', 'glob']);
+  });
+
+  it('keeps commas, braces and newlines inside string values', () => {
+    const content = 'a, b}\n{c: d}';
+    const result = parseGemmaToolCalls(call(`write_file{content:${Q}${content}${Q},file_path:${Q}/x.md${Q}}`));
+    expect(result?.toolCalls[0]!.function.arguments).toEqual({ content, file_path: '/x.md' });
+  });
+
+  it('parses booleans, arrays and nested objects', () => {
+    const result = parseGemmaToolCalls(call(`edit_file{replace_all:true,tags:[${Q}a${Q},2],opts:{deep:false}}`));
+    expect(result?.toolCalls[0]!.function.arguments).toEqual({ replace_all: true, tags: ['a', 2], opts: { deep: false } });
+  });
+
+  it('accepts JSON-style quotes when the escape token is decoded away', () => {
+    const result = parseGemmaToolCalls('call:grep{pattern:"TODO",output_mode:"content"}');
+    expect(result?.toolCalls[0]!.function).toEqual({ name: 'grep', arguments: { pattern: 'TODO', output_mode: 'content' } });
+  });
+
+  it('ignores a call cut off mid-way', () => {
+    expect(parseGemmaToolCalls(`<|tool_call>call:read_file{file_path:${Q}/x`)).toBeUndefined();
+  });
+
+  it('gives every call a unique id', () => {
+    const a = parseGemmaToolCalls(call(`ls{path:${Q}/${Q}}`))!.toolCalls[0]!.id;
+    const b = parseGemmaToolCalls(call(`ls{path:${Q}/${Q}}`))!.toolCalls[0]!.id;
+    expect(a).not.toBe(b);
+  });
+});
+
+describe('visibleReplyText', () => {
+  it('hides tool-call markup while streaming', () => {
+    expect(visibleReplyText(`Checking.<|tool_call>call:ls{path:${Q}/`)).toBe('Checking.');
+    expect(visibleReplyText('call:ls{path:"/"')).toBe('');
+    expect(visibleReplyText('Plain text')).toBe('Plain text');
+  });
+});
+
+describe('GEMMA_TOOL_STOP', () => {
+  it('stops when the model hands over to tool results', () => {
+    expect(GEMMA_TOOL_STOP.test('…<tool_call|><|tool_response>')).toBe(true);
+    expect(GEMMA_TOOL_STOP.test('a normal reply')).toBe(false);
+  });
+});
