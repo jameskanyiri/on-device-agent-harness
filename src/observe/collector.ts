@@ -86,6 +86,8 @@ export async function initCollectorDevice(): Promise<void> {
       await RNBlobUtil.fs.writeFile(DEVICE_ID_PATH, saved, 'utf8');
     }
     device = { ...device, id: saved };
+    // Anything queued while the id was loading can go now.
+    flush();
   } catch {
     // Traces still work; the device just shows as "unknown".
   }
@@ -105,7 +107,8 @@ export function setActive(next: LiveBeat['active'] | null) {
 }
 
 function beat() {
-  if (!host) return;
+  // Until the saved device id has loaded, a beat would show up as a separate "unknown" device.
+  if (!host || device.id === 'unknown') return;
   lastBeat = Date.now();
   const payload: LiveBeat = {
     device,
@@ -142,7 +145,12 @@ async function flush() {
     if (!(await fs.exists(QUEUE_DIR))) return;
     for (const file of (await fs.ls(QUEUE_DIR)).sort()) {
       const path = `${QUEUE_DIR}/${file}`;
-      const body = (await fs.readFile(path, 'utf8')) as string;
+      let body = (await fs.readFile(path, 'utf8')) as string;
+      // A trace recorded before the device id loaded gets the real id now.
+      if (device.id !== 'unknown' && body.includes('"id":"unknown"')) {
+        const trace = JSON.parse(body) as Trace;
+        if (trace.device.id === 'unknown') body = JSON.stringify({ ...trace, device: { ...trace.device, id: device.id } });
+      }
       const res = await post('/v1/traces', body);
       if (!res.ok) break;
       await fs.unlink(path);

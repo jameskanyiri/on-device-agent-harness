@@ -4,7 +4,9 @@ import { visibleReplyText } from '@/harness/gemma-tool-parser';
 
 /**
  * A turn's final text: its last assistant message (tool calls and results are
- * earlier messages). Falls back to the streamed text.
+ * earlier messages). Falls back to the streamed text. If the model said
+ * nothing after using tools (small models sometimes just end the turn), the
+ * reply reports what the tools did instead of showing an empty message.
  */
 export function finalReplyText(turn: Pick<LLMChatTurnResult, 'messages' | 'finishReason'>, streamed: string): string {
   if (turn.finishReason === 'maxToolTurns') {
@@ -12,5 +14,8 @@ export function finalReplyText(turn: Pick<LLMChatTurnResult, 'messages' | 'finis
   }
   const last = turn.messages.findLast((m) => m.role === 'assistant');
   const content = last?.content;
-  return typeof content === 'string' ? visibleReplyText(content).trim() : visibleReplyText(streamed);
+  const text = (typeof content === 'string' ? visibleReplyText(content) : visibleReplyText(streamed)).trim();
+  if (text) return text;
+  const results = turn.messages.filter((m) => m.role === 'tool').map((m) => (typeof m.content === 'string' ? m.content.trim() : ''));
+  return results.filter(Boolean).join('\n') || text;
 }

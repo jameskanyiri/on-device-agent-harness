@@ -18,8 +18,15 @@ const CALL_END = '<tool_call|>';
 const RESPONSE_START = '<|tool_response>';
 const STRING_DELIM = '<|"|>';
 
-/** Stops generation once the model hands over to the tool results. */
-export const GEMMA_TOOL_STOP = /<\|tool_response>/;
+/**
+ * Stops generation once the model hands over to the tool results, or emits
+ * `<eos>`: after a tool result Gemma sometimes ends with `<eos>`, which the
+ * tokenizer config doesn't list as a stop token (it lists `<turn|>`).
+ */
+export const GEMMA_TOOL_STOP = /<\|tool_response>|<eos>/;
+
+/** Special tokens that can leak into the text and should never be shown. */
+const LEAKED_TOKENS = /<eos>|<turn\|>|<\|turn>|<bos>/g;
 
 // `call:name{`, either right after the call token or (if special tokens were
 // decoded away) at the start of a line.
@@ -71,7 +78,7 @@ export function visibleReplyText(text: string): string {
 }
 
 function stripMarkup(text: string): string {
-  return text.split(CALL_START).join('').split(CALL_END).join('').split(RESPONSE_START).join('');
+  return text.split(CALL_START).join('').split(CALL_END).join('').split(RESPONSE_START).join('').replace(LEAKED_TOKENS, '');
 }
 
 // --- A small recursive-descent parser for Gemma's argument syntax. ---

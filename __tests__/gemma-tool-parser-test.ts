@@ -57,8 +57,16 @@ describe('visibleReplyText', () => {
 });
 
 describe('GEMMA_TOOL_STOP', () => {
-  it('stops when the model hands over to tool results', () => {
+  it('stops when the model hands over to tool results or ends with <eos>', () => {
     expect(GEMMA_TOOL_STOP.test('…<tool_call|><|tool_response>')).toBe(true);
+    expect(GEMMA_TOOL_STOP.test('<eos>')).toBe(true);
     expect(GEMMA_TOOL_STOP.test('a normal reply')).toBe(false);
+  });
+});
+
+describe('leaked special tokens', () => {
+  it('never shows <eos> or turn markers', () => {
+    expect(visibleReplyText('<eos>\n<eos>').trim()).toBe('');
+    expect(visibleReplyText('Saved it.<turn|>')).toBe('Saved it.');
   });
 });
