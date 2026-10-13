@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
+import android.provider.Settings
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -147,7 +148,48 @@ class DeviceMetricsModule : Module() {
         if (voltageMv > 0) sample["powerW"] = abs(currentMicroA) / 1e6 * (voltageMv / 1e3)
       }
     }
+
+    // Screen brightness, 0–255 in settings (adaptive brightness may differ slightly on screen).
+    try {
+      val raw = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+      sample["screenBrightness"] = (raw / 255.0).coerceIn(0.0, 1.0)
+    } catch (e: Exception) {
+      // not readable on this phone
+    }
+
+    val freqs = cpuFreqsMHz()
+    if (freqs.isNotEmpty()) {
+      sample["cpuFreqAvgMHz"] = freqs.average()
+      sample["cpuFreqMaxMHz"] = freqs.max()
+    }
+    gpuFreqMHz()?.let { sample["gpuFreqMHz"] = it }
     return sample
+  }
+
+  /** Current frequency of each online CPU core, from /sys (kHz there). Empty where it's not readable. */
+  private fun cpuFreqsMHz(): List<Double> {
+    val cores = Runtime.getRuntime().availableProcessors()
+    return (0 until cores).mapNotNull { i ->
+      readNumber("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")?.div(1000)
+    }
+  }
+
+  /**
+   * Current GPU frequency in MHz. Adreno (Qualcomm) exposes it in Hz, Mali in Hz or kHz;
+   * SELinux blocks both for apps on many phones, so this is often null.
+   */
+  private fun gpuFreqMHz(): Double? {
+    readNumber("/sys/class/kgsl/kgsl-3d0/gpuclk")?.let { return it / 1e6 }
+    readNumber("/sys/class/misc/mali0/device/cur_freq")?.let { return if (it > 1e6) it / 1e6 else it / 1e3 }
+    return null
+  }
+
+  private fun readNumber(path: String): Double? {
+    return try {
+      File(path).readText().trim().toDoubleOrNull()
+    } catch (e: Exception) {
+      null
+    }
   }
 
   /**

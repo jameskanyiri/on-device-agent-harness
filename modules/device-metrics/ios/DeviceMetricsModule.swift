@@ -16,6 +16,8 @@ public class DeviceMetricsModule: Module {
   private let batteryLock = NSLock()
   private var batteryLevel: Float = -1
   private var batteryState: UIDevice.BatteryState = .unknown
+  // UIScreen also belongs to the main thread; its brightness is cached the same way.
+  private var screenBrightness: Double = -1
 
   public func definition() -> ModuleDefinition {
     Name("DeviceMetrics")
@@ -24,7 +26,11 @@ public class DeviceMetricsModule: Module {
       DispatchQueue.main.async {
         UIDevice.current.isBatteryMonitoringEnabled = true
         self.refreshBattery()
+        self.refreshBrightness()
         let center = NotificationCenter.default
+        center.addObserver(
+          forName: UIScreen.brightnessDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.refreshBrightness() }
         center.addObserver(
           forName: UIDevice.batteryLevelDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.refreshBattery() }
@@ -96,6 +102,13 @@ public class DeviceMetricsModule: Module {
     batteryLock.unlock()
   }
 
+  private func refreshBrightness() {
+    let value = Double(UIScreen.main.brightness)
+    batteryLock.lock()
+    screenBrightness = value
+    batteryLock.unlock()
+  }
+
   private func snapshot() -> [String: Any] {
     var sample: [String: Any] = [
       "t": Date().timeIntervalSince1970 * 1000,
@@ -110,7 +123,9 @@ public class DeviceMetricsModule: Module {
     batteryLock.lock()
     let level = batteryLevel
     let state = batteryState
+    let brightness = screenBrightness
     batteryLock.unlock()
+    if brightness >= 0 { sample["screenBrightness"] = brightness }
     if level >= 0 { sample["batteryLevel"] = Double(level) }
     sample["batteryState"] = batteryStateName(state)
     return sample

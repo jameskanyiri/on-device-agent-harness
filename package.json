@@ -60,7 +60,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "ios:release": "npm run dashboard:env && expo run:ios --device --configuration Release",
-    "dashboard:env": "echo \"EXPO_PUBLIC_DASHBOARD_URL=http://$(scutil --get LocalHostName).local:8787\" > .env.local",
+    "dashboard:env": "echo \"EXPO_PUBLIC_DASHBOARD_URL=http://$(scutil --get LocalHostName).local:8787\nEXPO_PUBLIC_GIT_COMMIT=$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty)\" > .env.local",
     "test": "jest"
   },
   "private": true,

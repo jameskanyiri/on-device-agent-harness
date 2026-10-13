@@ -20,6 +20,7 @@ import { finalReplyText } from '@/harness/reply';
 import { CHAT_MODELS } from '@/lib/chat-models';
 import { setActive } from '@/observe/collector';
 import type { SpanKind } from '@/observe/trace';
+import executorchPackage from 'react-native-executorch/package.json';
 
 /** Benchmarks get their own workspace, wiped before every run (never the user's files). */
 export const BENCH_WORKSPACE_DIR = `${RNBlobUtil.fs.dirs.DocumentDir}/bench-workspace`;
@@ -56,7 +57,11 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
       osName: Device.osName,
       osVersion: Device.osVersion,
       appVersion: Constants.expoConfig?.version ?? null,
+      modelId: Device.modelId ?? null,
+      appCommit: process.env.EXPO_PUBLIC_GIT_COMMIT || null,
+      runtime: `react-native-executorch ${executorchPackage.version}`,
     },
+    generation: job.generation,
     ok: false,
     startedAt: Date.now(),
     endedAt: 0,
@@ -82,6 +87,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     phase('preparing', 'run');
     const model = CHAT_MODELS.find((m) => m.id === job.modelId);
     if (!model) throw new Error(`Unknown model '${job.modelId}'`);
+    result.modelFile = model.config.modelPath.split('/').pop() ?? null;
     if (!DeviceMetrics) log('DeviceMetrics native module missing: rebuild the app to record device metrics');
 
     log(`Preparing ${model.name} files`);
@@ -90,6 +96,9 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     phase('cooldown', 'cooldown');
     result.cooldownMs = await coolDown(job, log);
     await resetWorkspace(job.task.files ?? {});
+
+    // Where the phone starts from: results depend on how warm and charged it was.
+    result.start = DeviceMetrics?.getSnapshot();
 
     // Idle baseline: what the phone costs with the app open but no model loaded.
     DeviceMetrics?.startSampling(job.sampleIntervalMs);
@@ -248,15 +257,24 @@ function toGenerationRecord(s: llm.LLMGenerationStats): GenerationRecord {
   };
 }
 
-/** Waits `settleMs`, then until the phone is back to nominal thermal state (or `maxWaitMs`). */
+/**
+ * Waits `settleMs`, then until the phone has been at nominal thermal state for `stableMs`
+ * (or `maxWaitMs` in all). All zero runs jobs back to back.
+ */
 async function coolDown(job: Job, log: (message: string) => void): Promise<number> {
   const start = Date.now();
-  await sleep(job.cooldown.settleMs);
+  const { settleMs, maxWaitMs, stableMs = 0 } = job.cooldown;
+  await sleep(settleMs);
+  let nominalSince: number | null = null;
   for (;;) {
     const thermal = DeviceMetrics?.getSnapshot().thermal;
-    if (!thermal || thermal === 'nominal' || Date.now() - start >= job.cooldown.maxWaitMs) break;
-    log(`Cooling down (thermal: ${thermal})`);
-    await sleep(5000);
+    const now = Date.now();
+    if (!thermal || thermal === 'nominal') nominalSince ??= now;
+    else nominalSince = null;
+    if (now - start >= maxWaitMs) break;
+    if (nominalSince !== null && now - nominalSince >= stableMs) break;
+    log(nominalSince === null ? `Cooling down (thermal: ${thermal})` : `Waiting for a steady state (nominal ${Math.round((now - nominalSince) / 1000)} of ${Math.round(stableMs / 1000)} s)`);
+    await sleep(Math.min(5000, Math.max(1000, stableMs - (nominalSince === null ? 0 : now - nominalSince))));
   }
   return Date.now() - start;
 }

@@ -51,8 +51,11 @@ export type Job = {
   sampleIntervalMs: number;
   /** Idle sampling before the model loads, as each run's baseline. */
   idleMs: number;
-  /** Wait between runs: at least `settleMs`, then until thermal is nominal (up to `maxWaitMs`). */
-  cooldown: { settleMs: number; maxWaitMs: number };
+  /**
+   * Wait between runs: at least `settleMs`, then until thermal has been nominal for `stableMs`
+   * (default 0: as soon as it's nominal), giving up after `maxWaitMs`. All zero = back to back.
+   */
+  cooldown: { settleMs: number; maxWaitMs: number; stableMs?: number };
   /** A turn running longer than this is stopped and the run recorded as timed out. */
   turnTimeoutMs?: number;
 };
@@ -111,7 +114,19 @@ export type RunResult = {
     osName: string | null;
     osVersion: string | null;
     appVersion: string | null;
+    /** Hardware model, e.g. `iPhone16,1` (an iPhone 15 Pro). */
+    modelId?: string | null;
+    /** Git commit the app was built from (EXPO_PUBLIC_GIT_COMMIT), so a result can be traced to its code. */
+    appCommit?: string | null;
+    /** Inference runtime and version, e.g. `react-native-executorch 0.10.4`. */
+    runtime?: string | null;
   };
+  /** The model file that ran (its name carries the export variant: backend and quantisation). */
+  modelFile?: string | null;
+  /** Generation settings used (greedy when temperature is 0). */
+  generation?: Job['generation'];
+  /** The phone just before the model loaded (after cool-down): thermal, battery, charging, brightness… */
+  start?: MetricSample;
   ok: boolean;
   error?: string;
   startedAt: number;

@@ -27,6 +27,13 @@ export type MetricSample = {
   powerW?: number;
   /** Android: battery temperature in °C. */
   batteryTempC?: number;
+  /** Screen brightness, 0–1 (the display's power is part of every reading). */
+  screenBrightness?: number;
+  /** Android: mean and highest current CPU core frequency in MHz (where /sys is readable). */
+  cpuFreqAvgMHz?: number;
+  cpuFreqMaxMHz?: number;
+  /** Android: current GPU frequency in MHz, on phones that let apps read it (often blocked). */
+  gpuFreqMHz?: number;
 };
 
 export type DeviceInfo = {
