@@ -24,6 +24,8 @@ export type Scenario = {
   id: string;
   label: string;
   harness: HarnessConfig;
+  /** A system prompt this setup adds (before the task's own). The Mac merges it into the task. */
+  systemPrompt?: string;
 };
 
 /** One task, run from a fresh session and a fresh workspace. */
