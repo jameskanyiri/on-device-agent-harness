@@ -158,6 +158,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
       currentTurn = index;
       log(`Turn ${index + 1}/${job.task.turns.length}`);
       phase(`turn ${index + 1}`, 'turn');
+      const kvPosBefore = session.getKVCacheState().pos;
       const startedAt = Date.now();
       let firstTokenAt: number | undefined;
       let streamed = '';
@@ -194,6 +195,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
             startedAt,
             endedAt: Date.now(),
             firstTokenWallMs: firstTokenAt && firstTokenAt - startedAt,
+            kvPosBefore,
             generations: turn.stats.map(toGenerationRecord),
             kvPosAfter: current.getKVCacheState().pos,
           });
@@ -207,6 +209,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
           startedAt,
           endedAt: Date.now(),
           firstTokenWallMs: firstTokenAt && firstTokenAt - startedAt,
+          kvPosBefore,
           generations: turn.stats.map(toGenerationRecord),
           kvPosAfter: session.getKVCacheState().pos,
         });
@@ -225,6 +228,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
           startedAt,
           endedAt: Date.now(),
           firstTokenWallMs: firstTokenAt && firstTokenAt - startedAt,
+          kvPosBefore,
           generations: [],
         });
         throw e;

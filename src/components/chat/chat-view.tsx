@@ -387,7 +387,18 @@ export function ChatView({
     let final: Message = reply;
     try {
       const content = photo ? [{ kind: 'image' as const, image: photo.buffer }, prompt] : prompt;
+      // Context size before the message, and the real wait for the first word: executorch's
+      // own time to first token leaves out reading the user's message (a separate prefill).
+      let kvPosBefore: number | undefined;
+      try {
+        kvPosBefore = getKVCacheState?.().pos;
+      } catch {
+        // experimental API
+      }
+      const sentAt = Date.now();
+      let firstTokenAt: number | undefined;
       const turn = await session.sendMessage(content, (token) => {
+        firstTokenAt ??= Date.now();
         streamed += token;
         flushTimer ??= setTimeout(flush, FLUSH_INTERVAL_MS);
       });
@@ -399,7 +410,7 @@ export function ChatView({
         final = {
           ...final,
           tokensPerSec: seconds > 0 ? stats.numGeneratedTokens / seconds : undefined,
-          firstTokenMs: first.firstTokenMs - first.inferenceStartMs,
+          firstTokenMs: firstTokenAt !== undefined ? firstTokenAt - sentAt : first.firstTokenMs - first.inferenceStartMs,
         };
       }
       let kvPos: number | undefined;
@@ -408,7 +419,7 @@ export function ChatView({
       } catch {
         // experimental API
       }
-      turnTrace?.finish({ stats: turn.stats, finishReason: turn.finishReason, kvPos, reply: final.text });
+      turnTrace?.finish({ stats: turn.stats, finishReason: turn.finishReason, kvPos, kvPosBefore, firstTokenWallMs: firstTokenAt !== undefined ? firstTokenAt - sentAt : undefined, reply: final.text });
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       turnTrace?.finish(null, reason);

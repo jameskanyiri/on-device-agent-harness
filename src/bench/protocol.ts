@@ -101,6 +101,8 @@ export type TurnRecord = {
   generations: GenerationRecord[];
   /** KV cache position after the turn (context used). */
   kvPosAfter?: number;
+  /** KV cache position before the turn: with kvPosAfter, gives the tokens the model read. */
+  kvPosBefore?: number;
 };
 
 export type RunResult = {

@@ -74,10 +74,18 @@ export function traceChatTurn(ctx: ChatTraceContext, prompt: string) {
       live('generating', 'turn');
     },
     finish(
-      result: { stats: readonly llm.LLMGenerationStats[]; finishReason?: string; kvPos?: number; reply: string } | null,
+      result: {
+        stats: readonly llm.LLMGenerationStats[];
+        finishReason?: string;
+        kvPos?: number;
+        kvPosBefore?: number;
+        firstTokenWallMs?: number;
+        reply: string;
+      } | null,
       error?: string
     ) {
-      for (const [i, s] of (result?.stats ?? []).entries()) addGenerationSpan(builder, turn.id, s, i);
+      const reading = readingPerCall(result?.stats ?? [], result?.kvPosBefore, result?.kvPos);
+      for (const [i, s] of (result?.stats ?? []).entries()) addGenerationSpan(builder, turn.id, s, i, reading.calls[i]);
       const status = error ? 'error' : 'ok';
       const stats = result?.stats ?? [];
       const attrs: Record<string, AttrValue> = {
@@ -86,6 +94,10 @@ export function traceChatTurn(ctx: ChatTraceContext, prompt: string) {
         generatedTokens: stats.reduce((a, s) => a + s.numGeneratedTokens, 0),
         finishReason: result?.finishReason ?? 'error',
         kvPos: result?.kvPos ?? null,
+        kvPosBefore: result?.kvPosBefore ?? null,
+        firstTokenWallMs: result?.firstTokenWallMs ?? null,
+        readTokens: reading.tokens,
+        readMs: reading.ms,
         replyChars: result?.reply.length ?? 0,
         output: result ? clip(result.reply) : null,
         error: error ?? null,
@@ -118,7 +130,31 @@ export function addToolSpan(builder: TraceBuilder, parentId: string, a: ToolActi
 }
 
 /** executorch stamps generations with wall-clock ms, the same clock as Date.now(). */
-export function addGenerationSpan(builder: TraceBuilder, parentId: string, s: llm.LLMGenerationStats, index: number) {
+/**
+ * What the model read in a turn, and how long reading took. executorch's chat session reads the
+ * user's message in a separate prefill (timed as prefillDurationMs) and then generates from just
+ * the turn header, so numPromptTokens and the time to first token cover only that header on the
+ * first call; later calls (after tools) read the tool results inside generate. Tokens read in the
+ * turn = context growth minus what the model wrote; the first call gets what later calls didn't.
+ */
+export function readingPerCall(stats: readonly llm.LLMGenerationStats[], kvBefore?: number, kvAfter?: number) {
+  const calls = stats.map((s) => ({
+    tokens: s.numPromptTokens as number | null,
+    ms: (s.prefillDurationMs ?? 0) + (s.firstTokenMs - s.inferenceStartMs),
+  }));
+  const written = stats.reduce((a, s) => a + s.numGeneratedTokens, 0);
+  let tokens: number | null = null;
+  if (kvBefore !== undefined && kvAfter !== undefined && kvAfter >= kvBefore) {
+    tokens = Math.max(0, kvAfter - kvBefore - written);
+    const later = calls.slice(1).reduce((a, c) => a + (c.tokens ?? 0), 0);
+    if (calls[0]) calls[0].tokens = Math.max(0, tokens - later);
+  } else if (calls[0]) {
+    calls[0].tokens = null; // unknown: the separate prefill isn't counted anywhere else
+  }
+  return { tokens, ms: calls.reduce((a, c) => a + c.ms, 0), calls };
+}
+
+export function addGenerationSpan(builder: TraceBuilder, parentId: string, s: llm.LLMGenerationStats, index: number, read?: { tokens: number | null; ms: number }) {
   const decodeS = (s.inferenceEndMs - s.firstTokenMs) / 1000;
   builder.add({
     parentId,
@@ -134,6 +170,9 @@ export function addGenerationSpan(builder: TraceBuilder, parentId: string, s: ll
       firstTokenAt: s.firstTokenMs,
       tokensPerSec: decodeS > 0 ? Math.round((s.numGeneratedTokens / decodeS) * 10) / 10 : null,
       prefillMs: s.prefillDurationMs ?? null,
+      // Tokens this call read and how long reading took (see readingPerCall).
+      readTokens: read ? read.tokens : s.numPromptTokens,
+      readMs: read ? read.ms : (s.prefillDurationMs ?? 0) + (s.firstTokenMs - s.inferenceStartMs),
     },
   });
 }
