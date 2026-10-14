@@ -42,10 +42,10 @@ Rules:
 
 // ── Paths ───────────────────────────────────────────────────────────────────
 
-class ToolError extends Error {}
+export class ToolError extends Error {}
 
 /** Normalizes a model-supplied path to `/a/b` form; rejects escaping the workspace. */
-function normalize(path: unknown): string {
+export function normalize(path: unknown): string {
   const raw = typeof path === 'string' && path.trim() ? path.trim() : '/';
   const parts: string[] = [];
   for (const segment of raw.split('/')) {
@@ -59,11 +59,11 @@ function normalize(path: unknown): string {
 }
 
 /** Where a workspace path lives on disk, under `root` (a folder in Documents). */
-const toDisk = (root: string, virtual: string) => (virtual === '/' ? root : root + virtual);
+export const toDisk = (root: string, virtual: string) => (virtual === '/' ? root : root + virtual);
 
-const join = (dir: string, name: string) => (dir === '/' ? `/${name}` : `${dir}/${name}`);
+export const join = (dir: string, name: string) => (dir === '/' ? `/${name}` : `${dir}/${name}`);
 
-async function ensureDir(root: string, virtual: string): Promise<void> {
+export async function ensureDir(root: string, virtual: string): Promise<void> {
   let current = '';
   for (const part of ['', ...virtual.split('/').filter(Boolean)]) {
     current = part ? `${current}/${part}` : '';
@@ -80,7 +80,7 @@ export async function readWorkspaceFile(path: string, root = WORKSPACE_DIR): Pro
   return readText(root, normalize(path));
 }
 
-async function readText(root: string, virtual: string): Promise<string> {
+export async function readText(root: string, virtual: string): Promise<string> {
   const disk = toDisk(root, virtual);
   if (!(await RNBlobUtil.fs.exists(disk))) throw new ToolError(`Error: File '${virtual}' not found`);
   if (await RNBlobUtil.fs.isDir(disk)) {
@@ -129,7 +129,7 @@ function globToRegExp(pattern: string): RegExp {
 }
 
 /** Whether `path` (under `base`) matches a glob; a pattern without `/` matches file names. */
-function matchesGlob(path: string, base: string, pattern: string): boolean {
+export function matchesGlob(path: string, base: string, pattern: string): boolean {
   const relative = base === '/' ? path.slice(1) : path.slice(base.length + 1);
   const pat = pattern.replace(/^\/+/, '');
   const target = pat.includes('/') ? relative : (relative.split('/').pop() ?? relative);
@@ -154,7 +154,7 @@ function withLineNumbers(lines: string[], startLine: number): string {
   return out.join('\n');
 }
 
-function cap(text: string, hint: string): string {
+export function cap(text: string, hint: string): string {
   if (text.length <= MAX_OUTPUT_CHARS) return text;
   return `${text.slice(0, MAX_OUTPUT_CHARS)}\n\n[Output truncated at ${MAX_OUTPUT_CHARS} characters. ${hint}]`;
 }
@@ -182,6 +182,8 @@ export type ToolActivity = {
   durationMs?: number;
   /** Length of the result handed back to the model, in characters. */
   resultChars?: number;
+  /** The call showed `path` to the user (open_file, or bash's `open`). */
+  opens?: boolean;
 };
 
 export type FilesystemTools = {

@@ -37,6 +37,8 @@ export type Settings = {
   fileTools: boolean;
   /** With file tools on: the todo tool, so the model plans multi-step requests (harness study step 2). */
   planning: boolean;
+  /** With file tools on: one bash tool instead of the seven file tools (harness study step 3a). */
+  bash: boolean;
   /** Address of the dashboard on the Mac (Settings → Dashboard). */
   dashboardUrl: string;
   /** Live monitoring: heartbeats while the app is open, and a trace of every reply and model load. */
@@ -57,6 +59,7 @@ const DEFAULTS: Settings = {
   downloadStats: true,
   fileTools: true,
   planning: false,
+  bash: false,
   // Builds made on the Mac (npm run ios:release) know its address, so they connect with no setup.
   dashboardUrl: BUILD_DASHBOARD_URL,
   liveMonitoring: !!BUILD_DASHBOARD_URL,

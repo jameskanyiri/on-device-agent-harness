@@ -37,6 +37,7 @@ import { Motion } from '@/constants/motion';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { createFilesystemTools, FILESYSTEM_SYSTEM_PROMPT, type ToolActivity } from '@/harness/filesystem';
+import { BASH_SYSTEM_PROMPT, createBashTool } from '@/harness/bash';
 import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
 import { openFile } from '@/lib/open-file';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls, visibleReplyText } from '@/harness/gemma-tool-parser';
@@ -132,16 +133,23 @@ export function ChatView({
   // like ChatGPT's custom instructions.
   const [toolsOn] = useState(() => !!model.tools && settings.fileTools);
   const [planningOn] = useState(() => toolsOn && settings.planning);
+  const [bashOn] = useState(() => toolsOn && settings.bash);
   const [history] = useState(() =>
     toChatHistory(
       initialMessages,
-      [systemPromptFrom(settings.personalization), toolsOn && FILESYSTEM_SYSTEM_PROMPT, planningOn && PLANNING_SYSTEM_PROMPT]
+      [systemPromptFrom(settings.personalization), toolsOn && (bashOn ? BASH_SYSTEM_PROMPT : FILESYSTEM_SYSTEM_PROMPT), planningOn && PLANNING_SYSTEM_PROMPT]
         .filter(Boolean)
         .join('\n\n')
     )
   );
   // Tool calls are reported to whichever reply is being generated (see `send`).
-  const [fileTools] = useState(() => (toolsOn ? createFilesystemTools() : null));
+  // The workspace through the seven file tools, or through one bash tool.
+  const [fileTools] = useState(() => {
+    if (!toolsOn) return null;
+    if (!bashOn) return createFilesystemTools();
+    const bash = createBashTool();
+    return { tools: [bash.tool], setActivityListener: bash.setActivityListener };
+  });
   const [planning] = useState(() => (planningOn ? createPlanningTool() : null));
   const [toolOpts] = useState(() =>
     fileTools
@@ -389,7 +397,7 @@ export function ChatView({
       turnTrace?.tool(activity);
       streamed = '';
       flush();
-      if (activity.name === 'open_file' && activity.ok && activity.path) openFile(activity.path);
+      if ((activity.name === 'open_file' || activity.opens) && activity.ok && activity.path) openFile(activity.path);
     };
     fileTools?.setActivityListener(onActivity);
     planning?.setActivityListener(onActivity);

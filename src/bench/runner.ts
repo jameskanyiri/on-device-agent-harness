@@ -16,6 +16,7 @@ import {
   walk,
   type ToolActivity,
 } from '@/harness/filesystem';
+import { BASH_SYSTEM_PROMPT, createBashTool } from '@/harness/bash';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls } from '@/harness/gemma-tool-parser';
 import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
 import { finalReplyText } from '@/harness/reply';
@@ -117,7 +118,9 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     }
 
     const { harness } = job.scenario;
-    const fileTools = harness.fileTools
+    // Step 3a: the same workspace through one bash tool instead of the seven file tools.
+    const bash = harness.fileTools && harness.bash ? createBashTool({ root: BENCH_WORKSPACE_DIR }) : null;
+    const fileTools = harness.fileTools && !bash
       ? createFilesystemTools({ root: BENCH_WORKSPACE_DIR })
       : null;
     const planning = harness.planning ? createPlanningTool() : null;
@@ -138,10 +141,11 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
       phase(`turn ${currentTurn + 1}`, 'turn');
     };
     fileTools?.setActivityListener(onActivity);
+    bash?.setActivityListener(onActivity);
     planning?.setActivityListener(onActivity);
-    const tools = [...(fileTools?.tools ?? []), ...(planning ? [planning.tool] : [])];
+    const tools = [...(fileTools?.tools ?? []), ...(bash ? [bash.tool] : []), ...(planning ? [planning.tool] : [])];
 
-    const systemPrompt = [job.task.systemPrompt, fileTools && FILESYSTEM_SYSTEM_PROMPT, planning && PLANNING_SYSTEM_PROMPT]
+    const systemPrompt = [job.task.systemPrompt, fileTools && FILESYSTEM_SYSTEM_PROMPT, bash && BASH_SYSTEM_PROMPT, planning && PLANNING_SYSTEM_PROMPT]
       .filter(Boolean)
       .join('\n\n');
     const initialMessages: llm.ChatMessage[] = systemPrompt

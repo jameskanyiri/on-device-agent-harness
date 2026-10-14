@@ -49,6 +49,14 @@ export default function SettingsScreen() {
           />
           {settings.fileTools && (
             <Toggle
+              label="Use one bash tool"
+              systemImage="terminal"
+              isOn={settings.bash}
+              onIsOnChange={(bash) => update({ bash })}
+            />
+          )}
+          {settings.fileTools && (
+            <Toggle
               label="Plan with a todo list"
               systemImage="checklist"
               isOn={settings.planning}
