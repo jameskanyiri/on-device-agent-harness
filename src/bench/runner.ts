@@ -14,8 +14,10 @@ import {
   createFilesystemTools,
   FILESYSTEM_SYSTEM_PROMPT,
   walk,
+  type ToolActivity,
 } from '@/harness/filesystem';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls } from '@/harness/gemma-tool-parser';
+import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
 import { finalReplyText } from '@/harness/reply';
 import { CHAT_MODELS } from '@/lib/chat-models';
 import { setActive } from '@/observe/collector';
@@ -118,8 +120,9 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     const fileTools = harness.fileTools
       ? createFilesystemTools({ root: BENCH_WORKSPACE_DIR })
       : null;
+    const planning = harness.planning ? createPlanningTool() : null;
     let currentTurn = 0;
-    fileTools?.setActivityListener((a) => {
+    const onActivity = (a: ToolActivity) => {
       const record: ToolRecord = {
         turn: currentTurn,
         name: a.name,
@@ -133,9 +136,12 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
       result.tools.push(record);
       log(`  tool ${a.label}${a.ok ? '' : ' (failed)'}`);
       phase(`turn ${currentTurn + 1}`, 'turn');
-    });
+    };
+    fileTools?.setActivityListener(onActivity);
+    planning?.setActivityListener(onActivity);
+    const tools = [...(fileTools?.tools ?? []), ...(planning ? [planning.tool] : [])];
 
-    const systemPrompt = [job.task.systemPrompt, fileTools && FILESYSTEM_SYSTEM_PROMPT]
+    const systemPrompt = [job.task.systemPrompt, fileTools && FILESYSTEM_SYSTEM_PROMPT, planning && PLANNING_SYSTEM_PROMPT]
       .filter(Boolean)
       .join('\n\n');
     const initialMessages: llm.ChatMessage[] = systemPrompt
@@ -148,10 +154,10 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     session = await createLLMChatSession(config, {
       generationConfig: job.generation,
       initialMessages,
-      toolOpts: fileTools
-        ? { tools: fileTools.tools, parseToolCalls: parseGemmaToolCalls, maxToolTurns: job.maxToolTurns ?? 6 }
+      toolOpts: tools.length
+        ? { tools, parseToolCalls: parseGemmaToolCalls, maxToolTurns: job.maxToolTurns ?? 6 }
         : undefined,
-      stopRegex: fileTools ? GEMMA_TOOL_STOP : undefined,
+      stopRegex: tools.length ? GEMMA_TOOL_STOP : undefined,
     });
     result.phases.loadEnd = Date.now();
     const kv = session.getKVCacheState();
