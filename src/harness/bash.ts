@@ -343,7 +343,10 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
   }
 
   const opened: string[] = [];
-  const touched: string[] = [];
+  // What each command changed, so a command with no output still says what it did
+  // (Gemma often ends its turn right after a tool, and the chat then shows this).
+  const changes: { what: string; path: string }[] = [];
+  const did = (what: string, path: string) => changes.push({ what, path });
 
   const commands: Record<string, (args: string[], stdin: string | null) => Promise<Result>> = {
     pwd: async () => ok(`${cwd}\n`),
@@ -562,7 +565,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
           const before = await readFile('sed', f);
           const path = resolve(f);
           await fs.writeFile(toDisk(root, path), edit(before), 'utf8');
-          touched.push(path);
+          did('Changed', path);
         }
         return ok();
       }
@@ -574,13 +577,14 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
       for (const d of rest) {
         const path = resolve(d);
         if ((await exists(path)) && !(await isDir(path))) return fail(`mkdir: ${d}: File exists`);
+        if (!(await exists(path))) did('Created folder', path);
         await ensureDir(root, path);
       }
       return ok();
     },
 
     touch: async (args) => {
-      for (const f of args) if (!(await exists(resolve(f)))) touched.push(await writeFile('touch', f, '', true));
+      for (const f of args) if (!(await exists(resolve(f)))) did('Created', await writeFile('touch', f, '', true));
       return ok();
     },
 
@@ -593,7 +597,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
         const text = await readFile('cp', s);
         const target = into ? join(resolve(dest), s.split('/').pop()!) : dest;
         known.add(resolve(target));
-        touched.push(await writeFile('cp', target, text, false));
+        did(`Copied ${resolve(s)} to`, await writeFile('cp', target, text, false));
       }
       return ok();
     },
@@ -610,7 +614,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
         await ensureDir(root, to.slice(0, to.lastIndexOf('/')) || '/');
         await fs.mv(toDisk(root, from), toDisk(root, to));
         known.add(to);
-        touched.push(to);
+        did(`Moved ${from} to`, to);
       }
       return ok();
     },
@@ -626,7 +630,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
         }
         if ((await isDir(path)) && !set.has('r') && !set.has('R')) return fail(`rm: ${f}: is a directory`);
         await fs.unlink(toDisk(root, path));
-        touched.push(path);
+        did('Deleted', path);
       }
       return ok();
     },
@@ -647,7 +651,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
 
     tee: async (args, stdin) => {
       const { set, rest } = flags(args);
-      for (const f of rest) touched.push(await writeFile('tee', f, stdin ?? '', set.has('a')));
+      for (const f of rest) did(set.has('a') ? 'Added to' : 'Wrote', await writeFile('tee', f, stdin ?? '', set.has('a')));
       return ok(stdin ?? '');
     },
 
@@ -679,7 +683,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
           else if (!commands[name]) result = fail(`bash: ${name}: command not found. Available: ${COMMANDS.join(', ')}`, 127);
           else result = await commands[name]!(args, stdin);
           if (cmd.out && result.code === 0) {
-            touched.push(await writeFile('bash', cmd.out.path, result.out, cmd.out.append));
+            did(cmd.out.append ? 'Added to' : 'Wrote', await writeFile('bash', cmd.out.path, result.out, cmd.out.append));
             result = { ...result, out: '' };
           }
         } catch (e) {
@@ -709,7 +713,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
       const startedAt = Date.now();
       const command = typeof args?.command === 'string' ? args.command : '';
       opened.length = 0;
-      touched.length = 0;
+      changes.length = 0;
       let result: Result;
       try {
         await ensureDir(root, '/');
@@ -725,14 +729,16 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
         : succeeded
           ? result.code === 1
             ? "(no matches. grep -ril 'word' / searches every file, any capitals: try one shorter word)"
-            : '(done, no output)'
+            : changes.length
+              ? `Done. ${changes.map((c) => `${c.what} ${c.path}`).join('. ')}.`
+              : 'Done.'
           : `(failed with exit code ${result.code})`;
       const firstLine = command.trim().split('\n')[0] ?? '';
       onActivity?.({
         name: 'bash',
         label: opened.length ? `Opened ${opened.at(-1)}` : `$ ${firstLine.length > 60 ? `${firstLine.slice(0, 59)}…` : firstLine}`,
         ok: succeeded,
-        path: opened.at(-1) ?? touched.at(-1),
+        path: opened.at(-1) ?? changes.at(-1)?.path,
         opens: opened.length > 0,
         args: args ?? {},
         startedAt,

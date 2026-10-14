@@ -102,7 +102,7 @@ describe('bash tool', () => {
     const { sh } = await setup();
     await sh(`echo "Please fix the tap by Friday." >> /drafts/letter.txt`);
     expect(await sh('cat /drafts/letter.txt')).toBe('Dear landlord,\n\nThe kitchen tap is leaking again.\nPlease fix the tap by Friday.');
-    expect(await sh(`cat > /drafts/index.md <<'EOF'\n- letter.txt: asks the landlord to fix the tap\n- ideas.txt: watering the plants\nEOF`)).toBe('(done, no output)');
+    expect(await sh(`cat > /drafts/index.md <<'EOF'\n- letter.txt: asks the landlord to fix the tap\n- ideas.txt: watering the plants\nEOF`)).toBe('Done. Wrote /drafts/index.md.');
     expect(await sh('cat /drafts/index.md')).toBe('- letter.txt: asks the landlord to fix the tap\n- ideas.txt: watering the plants');
     await sh(`echo 'Reminder: dentist on the 14th at 9am' > /reminders/dentist.txt`);
     expect(await sh('cat /reminders/dentist.txt')).toBe('Reminder: dentist on the 14th at 9am');
@@ -113,6 +113,18 @@ describe('bash tool', () => {
     await sh(`echo "# Draft Index\\n\\n- ideas.txt: plants" > /drafts/index.md`);
     expect(await sh('cat /drafts/index.md')).toBe('# Draft Index\n\n- ideas.txt: plants');
     expect(await sh(`echo -E 'a\\nb'`)).toBe('a\\nb');
+  });
+
+  it('a command with no output says what it changed (the chat shows it when Gemma ends its turn)', async () => {
+    const { sh } = await setup();
+    expect(await sh(`echo 'Flight on Friday' > /notes/trip.md`)).toBe('Done. Wrote /notes/trip.md.');
+    expect(await sh(`echo '- [ ] Pack sunscreen' >> /notes/trip.md && sed -i 's/Friday/Saturday/' /notes/trip.md`)).toBe(
+      'Done. Added to /notes/trip.md. Changed /notes/trip.md.'
+    );
+    expect(await sh('mkdir -p /archive && mv /notes/trip.md /archive/ && rm /drafts/ideas.txt')).toBe(
+      'Done. Created folder /archive. Moved /notes/trip.md to /archive/trip.md. Deleted /drafts/ideas.txt.'
+    );
+    expect(await sh('cd /notes')).toBe('Done.');
   });
 
   it('won’t overwrite a file it hasn’t read, as edit_file won’t', async () => {
