@@ -9,6 +9,7 @@ import { Icon, type IconName } from '@/components/ui/icon';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { Spacing } from '@/constants/theme';
 import type { ToolActivity } from '@/harness/filesystem';
+import { parseSteps, type PlanStep } from '@/harness/planning';
 import { useTheme } from '@/hooks/use-theme';
 import { tapLight } from '@/lib/haptics';
 import { openFile } from '@/lib/open-file';
@@ -220,12 +221,19 @@ function AssistantReply({
   );
 }
 
-/** The file operations behind a reply, e.g. "Read /notes.md", one per line. */
+/**
+ * The tools behind a reply: the model's todo checklist as it last wrote it (it updates live
+ * while the reply streams), then the file operations, e.g. "Read /notes.md", one per line.
+ */
 function ToolSteps({ tools }: { tools: ToolActivity[] }) {
   const theme = useTheme();
+  const plan = tools.findLast((t) => t.name === 'todo' && t.ok);
+  // Checklist updates show in the checklist; only a failed one gets a row of its own.
+  const rows = tools.filter((t) => t.name !== 'todo' || !t.ok);
   return (
     <View style={styles.toolSteps}>
-      {tools.map((t, i) => {
+      {plan && <TodoChecklist steps={parseSteps(plan.args?.steps)} updates={tools.filter((t) => t.name === 'todo' && t.ok).length} />}
+      {rows.map((t, i) => {
         const path = t.ok ? t.path : undefined;
         const row = (
           <>
@@ -266,7 +274,48 @@ function ToolSteps({ tools }: { tools: ToolActivity[] }) {
   );
 }
 
+/** The model's plan for this reply: done steps ticked and struck through. */
+function TodoChecklist({ steps, updates }: { steps: PlanStep[]; updates: number }) {
+  const theme = useTheme();
+  const done = steps.filter((s) => s.done).length;
+  return (
+    <View
+      style={[styles.checklist, { backgroundColor: theme.backgroundElement }]}
+      accessibilityLabel={`Plan, ${done} of ${steps.length} steps done`}>
+      <View style={styles.toolStep}>
+        <Icon name="checklist" size={13} color={theme.textSecondary} />
+        <ThemedText type="small" themeColor="textSecondary" style={styles.toolLabel}>
+          {`Plan · ${done} of ${steps.length} done${updates > 1 ? ` · ${updates} updates` : ''}`}
+        </ThemedText>
+      </View>
+      {steps.map((s, i) => (
+        <View key={i} style={styles.toolStep}>
+          <Icon name={s.done ? 'stepDone' : 'stepOpen'} size={15} color={s.done ? theme.accent : theme.textSecondary} />
+          <ThemedText
+            type="small"
+            themeColor={s.done ? 'textSecondary' : 'text'}
+            style={[styles.checklistStep, s.done && styles.stepDone]}>
+            {s.step}
+          </ThemedText>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  checklist: {
+    gap: Spacing.two,
+    padding: Spacing.three,
+    borderRadius: 16,
+  },
+  checklistStep: {
+    flexShrink: 1,
+    fontSize: 14,
+  },
+  stepDone: {
+    textDecorationLine: 'line-through',
+  },
   toolSteps: {
     gap: Spacing.one,
   },

@@ -35,6 +35,8 @@ export type Settings = {
   downloadStats: boolean;
   /** Lets tool-capable models (Gemma 4) read and write files in the workspace. */
   fileTools: boolean;
+  /** With file tools on: the todo tool, so the model plans multi-step requests (harness study step 2). */
+  planning: boolean;
   /** Address of the dashboard on the Mac (Settings → Dashboard). */
   dashboardUrl: string;
   /** Live monitoring: heartbeats while the app is open, and a trace of every reply and model load. */
@@ -54,6 +56,7 @@ const DEFAULTS: Settings = {
   haptics: true,
   downloadStats: true,
   fileTools: true,
+  planning: false,
   // Builds made on the Mac (npm run ios:release) know its address, so they connect with no setup.
   dashboardUrl: BUILD_DASHBOARD_URL,
   liveMonitoring: !!BUILD_DASHBOARD_URL,

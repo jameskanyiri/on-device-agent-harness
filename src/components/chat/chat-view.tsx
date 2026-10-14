@@ -37,6 +37,7 @@ import { Motion } from '@/constants/motion';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { createFilesystemTools, FILESYSTEM_SYSTEM_PROMPT, type ToolActivity } from '@/harness/filesystem';
+import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
 import { openFile } from '@/lib/open-file';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls, visibleReplyText } from '@/harness/gemma-tool-parser';
 import { finalReplyText } from '@/harness/reply';
@@ -130,19 +131,26 @@ export function ChatView({
   // (and the File tools setting) apply to the next chat (or reopened chat),
   // like ChatGPT's custom instructions.
   const [toolsOn] = useState(() => !!model.tools && settings.fileTools);
+  const [planningOn] = useState(() => toolsOn && settings.planning);
   const [history] = useState(() =>
     toChatHistory(
       initialMessages,
-      [systemPromptFrom(settings.personalization), toolsOn && FILESYSTEM_SYSTEM_PROMPT]
+      [systemPromptFrom(settings.personalization), toolsOn && FILESYSTEM_SYSTEM_PROMPT, planningOn && PLANNING_SYSTEM_PROMPT]
         .filter(Boolean)
         .join('\n\n')
     )
   );
   // Tool calls are reported to whichever reply is being generated (see `send`).
   const [fileTools] = useState(() => (toolsOn ? createFilesystemTools() : null));
+  const [planning] = useState(() => (planningOn ? createPlanningTool() : null));
   const [toolOpts] = useState(() =>
     fileTools
-      ? { tools: fileTools.tools, parseToolCalls: parseGemmaToolCalls, maxToolTurns: 6 }
+      ? {
+          tools: [...fileTools.tools, ...(planning ? [planning.tool] : [])],
+          parseToolCalls: parseGemmaToolCalls,
+          // Planning roughly doubles the calls (each step plus a checklist update).
+          maxToolTurns: planning ? 16 : 6,
+        }
       : undefined
   );
   const session = useLLMChatSession(model.config, {
@@ -376,13 +384,15 @@ export function ChatView({
       ? traceChatTurn({ modelId: model.id, modelName: model.name, fileTools: toolsOn, threadId: conversationId }, prompt)
       : null;
     // Each tool call ends one generation; the next one streams the follow-up.
-    fileTools?.setActivityListener((activity) => {
+    const onActivity = (activity: ToolActivity) => {
       tools.push(activity);
       turnTrace?.tool(activity);
       streamed = '';
       flush();
       if (activity.name === 'open_file' && activity.ok && activity.path) openFile(activity.path);
-    });
+    };
+    fileTools?.setActivityListener(onActivity);
+    planning?.setActivityListener(onActivity);
 
     let final: Message = reply;
     try {
@@ -430,6 +440,7 @@ export function ChatView({
       };
     } finally {
       fileTools?.setActivityListener(null);
+      planning?.setActivityListener(null);
       if (flushTimer) clearTimeout(flushTimer);
       // Move the finished reply into the list in one update.
       setMessages((prev) => [...prev, final]);

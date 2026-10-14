@@ -47,6 +47,14 @@ export default function SettingsScreen() {
             isOn={settings.fileTools}
             onIsOnChange={(fileTools) => update({ fileTools })}
           />
+          {settings.fileTools && (
+            <Toggle
+              label="Plan with a todo list"
+              systemImage="checklist"
+              isOn={settings.planning}
+              onIsOnChange={(planning) => update({ planning })}
+            />
+          )}
         </Section>
 
         <Section title="Theme">
