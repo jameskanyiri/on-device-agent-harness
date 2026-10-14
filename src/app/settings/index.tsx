@@ -54,6 +54,12 @@ export default function SettingsScreen() {
             onIsOnChange={(bash) => update({ bash })}
           />
           <Toggle
+            label="Teach with examples"
+            systemImage="text.book.closed"
+            isOn={settings.examples}
+            onIsOnChange={(examples) => update({ examples })}
+          />
+          <Toggle
             label="Plan with a todo list"
             systemImage="checklist"
             isOn={settings.planning}

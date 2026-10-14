@@ -39,6 +39,8 @@ export type Settings = {
   planning: boolean;
   /** One bash tool for the workspace, on its own or alongside the file tools (harness study step 3a). */
   bash: boolean;
+  /** One system prompt with a worked example per job for the tools that are on (harness study step 3b). */
+  examples: boolean;
   /** Address of the dashboard on the Mac (Settings → Dashboard). */
   dashboardUrl: string;
   /** Live monitoring: heartbeats while the app is open, and a trace of every reply and model load. */
@@ -60,6 +62,7 @@ const DEFAULTS: Settings = {
   fileTools: true,
   planning: false,
   bash: false,
+  examples: false,
   // Builds made on the Mac (npm run ios:release) know its address, so they connect with no setup.
   dashboardUrl: BUILD_DASHBOARD_URL,
   liveMonitoring: !!BUILD_DASHBOARD_URL,

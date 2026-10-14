@@ -36,9 +36,10 @@ import { EdgeFade } from '@/components/ui/edge-fade';
 import { Motion } from '@/constants/motion';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { createFilesystemTools, FILESYSTEM_SYSTEM_PROMPT, type ToolActivity } from '@/harness/filesystem';
-import { BASH_SYSTEM_PROMPT, createBashTool } from '@/harness/bash';
-import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
+import { createFilesystemTools, type ToolActivity } from '@/harness/filesystem';
+import { createBashTool } from '@/harness/bash';
+import { createPlanningTool } from '@/harness/planning';
+import { harnessPrompt } from '@/harness/prompt';
 import { openFile } from '@/lib/open-file';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls, visibleReplyText } from '@/harness/gemma-tool-parser';
 import { finalReplyText } from '@/harness/reply';
@@ -135,17 +136,13 @@ export function ChatView({
     fileTools: !!model.tools && settings.fileTools,
     bash: !!model.tools && settings.bash,
     planning: !!model.tools && settings.planning,
+    examples: settings.examples,
   }));
   const toolsOn = on.fileTools || on.bash || on.planning;
   const [history] = useState(() =>
     toChatHistory(
       initialMessages,
-      [
-        systemPromptFrom(settings.personalization),
-        on.fileTools && FILESYSTEM_SYSTEM_PROMPT,
-        on.bash && BASH_SYSTEM_PROMPT,
-        on.planning && PLANNING_SYSTEM_PROMPT,
-      ]
+      [systemPromptFrom(settings.personalization), harnessPrompt(on)]
         .filter(Boolean)
         .join('\n\n')
     )

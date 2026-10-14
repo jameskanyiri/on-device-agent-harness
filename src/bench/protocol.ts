@@ -22,6 +22,8 @@ export type HarnessConfig = {
   planning?: boolean;
   /** One bash tool (src/harness/bash.ts) for the workspace; independent of fileTools. Step 3a. */
   bash?: boolean;
+  /** One system prompt with a worked example per job for the tools that are on (src/harness/prompt.ts). Step 3b. */
+  examples?: boolean;
 };
 
 export type Scenario = {

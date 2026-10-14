@@ -87,13 +87,13 @@ describe('bash tool', () => {
     expect(await sh('grep -rn "9am" /notes')).toBe('/notes/health.md:3:Dentist on the 14th at 9am.');
     expect(await sh('ls /drafts/*.txt | wc -l')).toBe('2');
     expect(await sh('find / -name "*.txt"')).toBe('/drafts/ideas.txt\n/drafts/letter.txt');
-    expect(await sh('grep -r passport /')).toBe('(no matches)');
+    expect(await sh('grep -r passport /')).toMatch(/^\(no matches\. grep -ril 'word' \//);
   });
 
   it('gives the errors the model already knows', async () => {
     const { sh, activity } = await setup();
-    expect(await sh('cat /notes')).toBe('cat: /notes: Is a directory');
-    expect(await sh('cat /notes/budget.md')).toBe('cat: /notes/budget.md: No such file or directory');
+    expect(await sh('cat /notes')).toBe('cat: /notes: Is a directory. To list it: ls /notes');
+    expect(await sh('cat /notes/budget.md')).toBe(`cat: /notes/budget.md: No such file or directory\nTo find a file by what it says: grep -ril 'word' /   To list every file: ls -R /`);
     expect(await sh('python3 x.py')).toMatch(/^bash: python3: command not found\. Available: ls, cat/);
     expect(activity.map((a) => a.ok)).toEqual([false, false, false]);
   });
@@ -138,9 +138,17 @@ describe('bash tool', () => {
 
   it('runs && only after success, and || only after failure', async () => {
     const { sh } = await setup();
-    expect(await sh('cat /nope.md && echo yes')).toBe('cat: /nope.md: No such file or directory');
-    expect(await sh('cat /nope.md || echo fallback')).toBe('fallback\ncat: /nope.md: No such file or directory');
+    expect(await sh('cat /nope.md && echo yes')).toMatch(/^cat: \/nope\.md: No such file or directory\n/);
+    expect(await sh('cat /nope.md || echo fallback')).toMatch(/^fallback\ncat: \/nope\.md: No such file or directory/);
     expect(await sh('cd /notes; ls')).toBe('health.md');
+  });
+
+  it('find rejects options it can’t run, instead of listing every file (step3a-e2)', async () => {
+    const { sh, activity } = await setup();
+    expect(await sh(`find . -type f -exec grep -i "dentist" {} \\;`)).toBe(
+      "find: -exec is not supported here (supported: -name, -iname, -type). To search inside files: grep -ril 'word' /"
+    );
+    expect(activity.at(-1)?.ok).toBe(false);
   });
 
   it('open shows a file to the user, and the activity says so', async () => {

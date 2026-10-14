@@ -70,6 +70,16 @@ describe('filesystem tools', () => {
     expect(await fresh.run('read_file', { file_path: '/a.md' })).toContain('one 2 2');
   });
 
+  it('errors say what to try next (step 3b)', async () => {
+    const { run } = setup();
+    expect(await run('read_file', { file_path: '/notes/budget_sync_notes.md' })).toBe(
+      "Error: File '/notes/budget_sync_notes.md' not found. To find a file by what it says, use grep with one word from it. To see every file, use glob with **/*."
+    );
+    await run('write_file', { file_path: '/letter.txt', content: 'Dear landlord,\n' });
+    expect(await run('edit_file', { file_path: '/letter.txt', old_string: '     1\tDear landlord,', new_string: 'Hi' })).toMatch(/without the line numbers/);
+    expect(await run('grep', { pattern: 'nothing like this' })).toMatch(/^No matches found\. .*shorter word/);
+  });
+
   it('pages long files', async () => {
     const { run } = setup();
     await run('write_file', { file_path: '/long.txt', content: Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n') });

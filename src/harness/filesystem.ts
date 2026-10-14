@@ -40,6 +40,14 @@ Rules:
 - Read a file before editing it. Prefer editing an existing file over creating a new one.
 - Only use the tools when the request needs files.`;
 
+// ── Errors ──────────────────────────────────────────────────────────────────
+
+/*
+ * Step 3b: an error says what to try next. Small models tend to repeat a call
+ * they just saw fail, and our most common failure is guessing a file name.
+ */
+const FIND_HINT = 'To find a file by what it says, use grep with one word from it. To see every file, use glob with **/*.';
+
 // ── Paths ───────────────────────────────────────────────────────────────────
 
 export class ToolError extends Error {}
@@ -73,6 +81,14 @@ export async function ensureDir(root: string, virtual: string): Promise<void> {
       throw new ToolError(`Error: '${current}' is a file, not a folder`);
     }
   }
+}
+
+/** readText for the tools: a missing file's error says how to find it. */
+async function readForTool(root: string, virtual: string): Promise<string> {
+  if (!(await RNBlobUtil.fs.exists(toDisk(root, virtual)))) {
+    throw new ToolError(`Error: File '${virtual}' not found. ${FIND_HINT}`);
+  }
+  return readText(root, virtual);
 }
 
 /** Reads a workspace file for the app's file viewer. Throws a readable message on failure. */
@@ -258,7 +274,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
       async (args) => {
         const path = normalize(args.path);
         const disk = toDisk(root, path);
-        if (!(await RNBlobUtil.fs.exists(disk))) throw new ToolError(`Error: Folder '${path}' not found`);
+        if (!(await RNBlobUtil.fs.exists(disk))) throw new ToolError(`Error: Folder '${path}' not found. To see every file, use glob with **/*.`);
         if (!(await RNBlobUtil.fs.isDir(disk))) throw new ToolError(`Error: '${path}' is a file, not a folder`);
         const entries = (await RNBlobUtil.fs.lstat(disk))
           .map((e) => join(path, e.filename) + (e.type === 'directory' ? '/' : ''))
@@ -282,7 +298,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
       (a) => `Read ${normalize(a.file_path)}`,
       async (args) => {
         const path = normalize(args.file_path);
-        const content = await readText(root, path);
+        const content = await readForTool(root, path);
         readPaths.add(path);
         if (!content.trim()) return 'System reminder: File exists but has empty contents';
         const lines = content.split('\n');
@@ -350,7 +366,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
       (a) => `Edited ${normalize(a.file_path)}`,
       async (args) => {
         const path = normalize(args.file_path);
-        const content = await readText(root, path);
+        const content = await readForTool(root, path);
         if (!readPaths.has(path)) {
           throw new ToolError(`Error: You must read '${path}' with read_file before editing it.`);
         }
@@ -358,7 +374,11 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
         const newString = str(args.new_string);
         if (!oldString) throw new ToolError('Error: old_string is required');
         const occurrences = content.split(oldString).length - 1;
-        if (occurrences === 0) throw new ToolError(`Error: String not found in file: '${oldString}'`);
+        if (occurrences === 0) {
+          throw new ToolError(
+            `Error: String not found in file: '${oldString}'. Copy old_string exactly from read_file's output, without the line numbers at the start of each line.`
+          );
+        }
         if (occurrences > 1 && args.replace_all !== true) {
           throw new ToolError(
             `Error: String '${oldString}' appears ${occurrences} times. Use replace_all=true to replace all, or provide a more specific string with surrounding context.`
@@ -391,7 +411,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
           .filter((f) => matchesGlob(f.path, base, pattern))
           .sort((a, b) => b.modified - a.modified)
           .map((f) => f.path);
-        return matches.length ? cap(matches.join('\n'), 'Use a narrower pattern.') : 'No files found';
+        return matches.length ? cap(matches.join('\n'), 'Use a narrower pattern.') : 'No files found. To search inside files, use grep with one word.';
       }
     ),
 
@@ -435,7 +455,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
             results.set(file.path, hits);
           });
         }
-        if (!results.size) return 'No matches found';
+        if (!results.size) return 'No matches found. grep matches exact text, capitals included: try one shorter word.';
         const paths = [...results.keys()].sort();
         if (mode === 'count') return paths.map((p) => `${p}: ${results.get(p)!.length}`).join('\n');
         if (mode !== 'content') return cap(paths.join('\n'), 'Narrow it with path or glob.');
@@ -461,7 +481,7 @@ export function createFilesystemTools({ root = WORKSPACE_DIR }: { root?: string 
       (a) => `Opened ${normalize(a.file_path)}`,
       async (args) => {
         const path = normalize(args.file_path);
-        await readText(root, path); // fails clearly if it's missing, a folder or too large
+        await readForTool(root, path); // fails clearly if it's missing, a folder or too large
         return `Opened ${path} for the user.`;
       },
       'file_path'

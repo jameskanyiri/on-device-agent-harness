@@ -37,6 +37,9 @@ Rules:
 
 const MAX_WALK = 1000;
 
+/* Step 3b: errors say what to try next (small models repeat a call they just saw fail). */
+const NOT_FOUND_HINT = "To find a file by what it says: grep -ril 'word' /   To list every file: ls -R /";
+
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
 type Token =
@@ -273,8 +276,8 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
 
   async function readFile(cmd: string, arg: string): Promise<string> {
     const path = resolve(arg);
-    if (!(await exists(path))) throw new ToolError(`${cmd}: ${arg}: No such file or directory`);
-    if (await isDir(path)) throw new ToolError(`${cmd}: ${arg}: Is a directory`);
+    if (!(await exists(path))) throw new ToolError(`${cmd}: ${arg}: No such file or directory\n${NOT_FOUND_HINT}`);
+    if (await isDir(path)) throw new ToolError(`${cmd}: ${arg}: Is a directory. To list it: ls ${arg}`);
     const text = await readText(root, path);
     known.add(path);
     return text;
@@ -361,7 +364,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
       for (const t of targets) {
         const path = resolve(t);
         if (!(await exists(path))) {
-          err += `ls: cannot access '${t}': No such file or directory\n`;
+          err += `ls: cannot access '${t}': No such file or directory\nTo list every file: ls -R /\n`;
           code = 2;
           continue;
         }
@@ -484,6 +487,9 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
           tests.push((f) => (v === 'd' ? f.dir : !f.dir));
           i++;
         } else if (a === '-maxdepth' || a === '-mindepth') i++;
+        else if (a !== '-print') {
+          return fail(`find: ${a} is not supported here (supported: -name, -iname, -type). To search inside files: grep -ril 'word' /`);
+        }
       }
       const out: string[] = [];
       let err = '';
@@ -718,7 +724,7 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
         ? cap(text.replace(/\n$/, ''), 'Narrow it with head, grep or a smaller path.')
         : succeeded
           ? result.code === 1
-            ? '(no matches)'
+            ? "(no matches. grep -ril 'word' / searches every file, any capitals: try one shorter word)"
             : '(done, no output)'
           : `(failed with exit code ${result.code})`;
       const firstLine = command.trim().split('\n')[0] ?? '';

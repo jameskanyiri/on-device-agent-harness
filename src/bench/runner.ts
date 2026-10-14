@@ -12,13 +12,13 @@ import DeviceMetrics from '../../modules/device-metrics';
 import type { GenerationRecord, Job, RunResult, ToolRecord } from '@/bench/protocol';
 import {
   createFilesystemTools,
-  FILESYSTEM_SYSTEM_PROMPT,
   walk,
   type ToolActivity,
 } from '@/harness/filesystem';
-import { BASH_SYSTEM_PROMPT, createBashTool } from '@/harness/bash';
+import { createBashTool } from '@/harness/bash';
 import { GEMMA_TOOL_STOP, parseGemmaToolCalls } from '@/harness/gemma-tool-parser';
-import { createPlanningTool, PLANNING_SYSTEM_PROMPT } from '@/harness/planning';
+import { createPlanningTool } from '@/harness/planning';
+import { harnessPrompt } from '@/harness/prompt';
 import { finalReplyText } from '@/harness/reply';
 import { CHAT_MODELS } from '@/lib/chat-models';
 import { setActive } from '@/observe/collector';
@@ -145,7 +145,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     planning?.setActivityListener(onActivity);
     const tools = [...(fileTools?.tools ?? []), ...(bash ? [bash.tool] : []), ...(planning ? [planning.tool] : [])];
 
-    const systemPrompt = [job.task.systemPrompt, fileTools && FILESYSTEM_SYSTEM_PROMPT, bash && BASH_SYSTEM_PROMPT, planning && PLANNING_SYSTEM_PROMPT]
+    const systemPrompt = [job.task.systemPrompt, harnessPrompt({ fileTools: !!fileTools, bash: !!bash, planning: !!planning, examples: harness.examples })]
       .filter(Boolean)
       .join('\n\n');
     const initialMessages: llm.ChatMessage[] = systemPrompt
