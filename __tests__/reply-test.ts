@@ -22,4 +22,10 @@ describe('finalReplyText', () => {
   it('explains when the tool budget ran out', () => {
     expect(finalReplyText(turn([], 'maxToolTurns'), '')).toMatch(/too many file operations/);
   });
+
+  it('a call that couldn’t be read shows what the model wrote, not an empty reply', () => {
+    expect(finalReplyText(turn([{ role: 'assistant', content: '<|tool_call>call:bash[command: ls]<tool_call|>' }]), '')).toBe(
+      "(A tool call I couldn't run) call:bash[command: ls]"
+    );
+  });
 });

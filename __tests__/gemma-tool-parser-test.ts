@@ -78,3 +78,30 @@ describe('leaked special tokens', () => {
     expect(visibleReplyText('Saved it.<turn|>')).toBe('Saved it.');
   });
 });
+
+// Step 3b: worked examples in the prompt (`bash(command="ls /")`) bend Gemma's own call format.
+describe('calls written like the prompt’s examples', () => {
+  const args = (text: string) => parseGemmaToolCalls(text)?.toolCalls.map((c) => [c.function.name, c.function.arguments]);
+
+  it('key="value" inside Gemma’s braces', () => {
+    expect(args(`<|tool_call>call:bash{command="grep -ril 'dentist' /"}<tool_call|>`)).toEqual([['bash', { command: "grep -ril 'dentist' /" }]]);
+    expect(args(`<|tool_call>call:bash{command: "ls -R /"}<tool_call|>`)).toEqual([['bash', { command: 'ls -R /' }]]);
+  });
+
+  it('round brackets after the call token, with or without call:', () => {
+    expect(args(`<|tool_call>bash(command="cat /notes/health.md")<tool_call|>`)).toEqual([['bash', { command: 'cat /notes/health.md' }]]);
+    expect(args(`<|tool_call>call:read_file(file_path="/todo.md")<tool_call|>`)).toEqual([['read_file', { file_path: '/todo.md' }]]);
+    expect(args(`<|tool_call>todo(steps=[{step: "find it", done: false}])<tool_call|>`)).toEqual([['todo', { steps: [{ step: 'find it', done: false }] }]]);
+  });
+
+  it('keeps backslashes that aren’t valid JSON escapes (sed)', () => {
+    expect(args(`<|tool_call>call:bash{command="sed -i 's/- \\[ \\] Book/- [x] Book/' /todo.md"}<tool_call|>`)).toEqual([
+      ['bash', { command: "sed -i 's/- \\[ \\] Book/- [x] Book/' /todo.md" }],
+    ]);
+  });
+
+  it('prose like name(...) is not a call', () => {
+    expect(parseGemmaToolCalls('You can run bash(command="ls") yourself.')).toBeUndefined();
+    expect(parseGemmaToolCalls('Use read_file(file_path) to read it.')).toBeUndefined();
+  });
+});

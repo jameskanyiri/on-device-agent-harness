@@ -1,6 +1,6 @@
 import type { LLMChatTurnResult } from 'react-native-executorch';
 
-import { visibleReplyText } from '@/harness/gemma-tool-parser';
+import { stripMarkup, visibleReplyText } from '@/harness/gemma-tool-parser';
 
 /**
  * A turn's final text: its last assistant message (tool calls and results are
@@ -17,5 +17,10 @@ export function finalReplyText(turn: Pick<LLMChatTurnResult, 'messages' | 'finis
   const text = (typeof content === 'string' ? visibleReplyText(content) : visibleReplyText(streamed)).trim();
   if (text) return text;
   const results = turn.messages.filter((m) => m.role === 'tool').map((m) => (typeof m.content === 'string' ? m.content.trim() : ''));
-  return results.filter(Boolean).join('\n') || text;
+  const fromTools = results.filter(Boolean).join('\n');
+  if (fromTools) return fromTools;
+  // Only a tool call that couldn't be read (nothing ran): show what the model wrote, so
+  // it's visible in the chat and the eval instead of an empty reply.
+  const raw = stripMarkup(typeof content === 'string' ? content : streamed).trim();
+  return raw ? `(A tool call I couldn't run) ${raw}` : text;
 }

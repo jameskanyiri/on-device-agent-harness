@@ -29,8 +29,10 @@ export const GEMMA_TOOL_STOP = /<\|tool_response>|<eos>/;
 const LEAKED_TOKENS = /<eos>|<turn\|>|<\|turn>|<bos>/g;
 
 // `call:name{`, either right after the call token or (if special tokens were
-// decoded away) at the start of a line.
-const CALL_RE = /(<\|tool_call>|^|\n)\s*call:([A-Za-z_][\w.-]*)\s*\{/g;
+// decoded away) at the start of a line. After the call token, `call:` may be
+// missing and the arguments may be in round brackets: worked examples in the
+// prompt (`bash(command="ls /")`, Step 3b) bend the model's own format.
+const CALL_RE = /(<\|tool_call>|^|\n)\s*(call:)?([A-Za-z_][\w.-]*)\s*([{(])/g;
 
 let nextId = 0;
 
@@ -42,10 +44,12 @@ export function parseGemmaToolCalls(text: string): llm.ToolParserResult | undefi
 
   CALL_RE.lastIndex = 0;
   for (let match = CALL_RE.exec(text); match; match = CALL_RE.exec(text)) {
+    // Without `call:`, only right after the call token: elsewhere `name(` is just prose.
+    if (!match[2] && match[1] !== CALL_START) continue;
     const braceAt = match.index + match[0].length - 1;
     let parsed: { value: unknown; end: number };
     try {
-      parsed = parseValue(text, braceAt);
+      parsed = match[4] === '(' ? parseObject(text, braceAt, ')') : parseValue(text, braceAt);
     } catch {
       continue; // Not a well-formed call; leave it as text.
     }
@@ -53,7 +57,7 @@ export function parseGemmaToolCalls(text: string): llm.ToolParserResult | undefi
     toolCalls.push({
       id: `call_${nextId++}`,
       type: 'function',
-      function: { name: match[2]!, arguments: parsed.value as Record<string, unknown> },
+      function: { name: match[3]!, arguments: parsed.value as Record<string, unknown> },
     });
     cursor = parsed.end;
     if (text.startsWith(CALL_END, cursor)) cursor += CALL_END.length;
@@ -77,7 +81,7 @@ export function visibleReplyText(text: string): string {
   return stripMarkup(head.replace(/(^|\n)\s*call:[A-Za-z_][\w.-]*\s*\{[\s\S]*$/, '$1'));
 }
 
-function stripMarkup(text: string): string {
+export function stripMarkup(text: string): string {
   return text.split(CALL_START).join('').split(CALL_END).join('').split(RESPONSE_START).join('').replace(LEAKED_TOKENS, '');
 }
 
@@ -88,7 +92,7 @@ function skipSpace(s: string, i: number): number {
   return i;
 }
 
-function parseValue(s: string, i: number): { value: unknown; end: number } {
+function parseValue(s: string, i: number, close: '}' | ')' = '}'): { value: unknown; end: number } {
   i = skipSpace(s, i);
   if (s.startsWith(STRING_DELIM, i)) {
     const close = s.indexOf(STRING_DELIM, i + STRING_DELIM.length);
@@ -102,7 +106,8 @@ function parseValue(s: string, i: number): { value: unknown; end: number } {
   // Bare scalar: runs to the next separator. The model sometimes drops a string's opening
   // delimiter (`pattern:/drafts/*.txt<|"|>}`), so a closing one also ends the value.
   let end = i;
-  while (end < s.length && !',}]'.includes(s[end]!) && !s.startsWith(STRING_DELIM, end)) end++;
+  const stops = close === ')' ? ',)]' : ',}]';
+  while (end < s.length && !stops.includes(s[end]!) && !s.startsWith(STRING_DELIM, end)) end++;
   const raw = s.slice(i, end).trim();
   if (!raw) throw new Error('missing value');
   if (s.startsWith(STRING_DELIM, end)) return { value: raw, end: end + STRING_DELIM.length };
@@ -121,7 +126,13 @@ function parseJsonString(s: string, i: number): { value: string; end: number } {
   let j = i + 1;
   while (j < s.length && s[j] !== '"') j += s[j] === '\\' ? 2 : 1;
   if (j >= s.length) throw new Error('unterminated string');
-  return { value: JSON.parse(s.slice(i, j + 1)) as string, end: j + 1 };
+  const raw = s.slice(i, j + 1);
+  try {
+    return { value: JSON.parse(raw) as string, end: j + 1 };
+  } catch {
+    // Not valid JSON (e.g. sed's \[ in a command): keep backslashes except before " and \.
+    return { value: raw.slice(1, -1).replace(/\\(["\\])/g, '$1').replace(/\\n/g, '\n'), end: j + 1 };
+  }
 }
 
 function parseKey(s: string, i: number): { key: string; end: number } {
@@ -131,26 +142,27 @@ function parseKey(s: string, i: number): { key: string; end: number } {
     return { key: String(value), end };
   }
   let end = i;
-  while (end < s.length && s[end] !== ':' && s[end] !== '}') end++;
+  while (end < s.length && !':=})'.includes(s[end]!)) end++;
   const key = s.slice(i, end).trim();
   if (!key) throw new Error('missing key');
   return { key, end };
 }
 
-function parseObject(s: string, i: number): { value: Record<string, unknown>; end: number } {
+/** `{key:value, …}`, or `(key=value, …)` after a call written like the prompt's examples. */
+function parseObject(s: string, i: number, close: '}' | ')' = '}'): { value: Record<string, unknown>; end: number } {
   const obj: Record<string, unknown> = {};
   i = skipSpace(s, i + 1);
-  if (s[i] === '}') return { value: obj, end: i + 1 };
+  if (s[i] === close) return { value: obj, end: i + 1 };
   while (i < s.length) {
     const { key, end: keyEnd } = parseKey(s, i);
     i = skipSpace(s, keyEnd);
-    if (s[i] !== ':') throw new Error('expected :');
-    const { value, end } = parseValue(s, i + 1);
+    if (s[i] !== ':' && s[i] !== '=') throw new Error('expected :');
+    const { value, end } = parseValue(s, i + 1, close);
     obj[key] = value;
     i = skipSpace(s, end);
     if (s[i] === ',') i = skipSpace(s, i + 1);
-    else if (s[i] === '}') return { value: obj, end: i + 1 };
-    else throw new Error('expected , or }');
+    else if (s[i] === close) return { value: obj, end: i + 1 };
+    else throw new Error(`expected , or ${close}`);
   }
   throw new Error('unterminated object');
 }
