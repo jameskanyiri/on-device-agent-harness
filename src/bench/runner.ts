@@ -118,11 +118,11 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     }
 
     const { harness } = job.scenario;
-    // Step 3a: the same workspace through one bash tool instead of the seven file tools.
-    const bash = harness.fileTools && harness.bash ? createBashTool({ root: BENCH_WORKSPACE_DIR }) : null;
-    const fileTools = harness.fileTools && !bash
+    const fileTools = harness.fileTools
       ? createFilesystemTools({ root: BENCH_WORKSPACE_DIR })
       : null;
+    // Step 3a: the same workspace through one bash tool.
+    const bash = harness.bash ? createBashTool({ root: BENCH_WORKSPACE_DIR }) : null;
     const planning = harness.planning ? createPlanningTool() : null;
     let currentTurn = 0;
     const onActivity = (a: ToolActivity) => {

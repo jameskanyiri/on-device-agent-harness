@@ -35,9 +35,9 @@ export type Settings = {
   downloadStats: boolean;
   /** Lets tool-capable models (Gemma 4) read and write files in the workspace. */
   fileTools: boolean;
-  /** With file tools on: the todo tool, so the model plans multi-step requests (harness study step 2). */
+  /** The todo tool, so the model plans multi-step requests (harness study step 2). */
   planning: boolean;
-  /** With file tools on: one bash tool instead of the seven file tools (harness study step 3a). */
+  /** One bash tool for the workspace, on its own or alongside the file tools (harness study step 3a). */
   bash: boolean;
   /** Address of the dashboard on the Mac (Settings → Dashboard). */
   dashboardUrl: string;

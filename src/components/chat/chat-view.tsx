@@ -129,35 +129,44 @@ export function ChatView({
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
   // Built once: the session is created at mount, so personalization changes
-  // (and the File tools setting) apply to the next chat (or reopened chat),
-  // like ChatGPT's custom instructions.
-  const [toolsOn] = useState(() => !!model.tools && settings.fileTools);
-  const [planningOn] = useState(() => toolsOn && settings.planning);
-  const [bashOn] = useState(() => toolsOn && settings.bash);
+  // (and the tool settings) apply to the next chat (or reopened chat),
+  // like ChatGPT's custom instructions. Each tool setting is independent.
+  const [on] = useState(() => ({
+    fileTools: !!model.tools && settings.fileTools,
+    bash: !!model.tools && settings.bash,
+    planning: !!model.tools && settings.planning,
+  }));
+  const toolsOn = on.fileTools || on.bash || on.planning;
   const [history] = useState(() =>
     toChatHistory(
       initialMessages,
-      [systemPromptFrom(settings.personalization), toolsOn && (bashOn ? BASH_SYSTEM_PROMPT : FILESYSTEM_SYSTEM_PROMPT), planningOn && PLANNING_SYSTEM_PROMPT]
+      [
+        systemPromptFrom(settings.personalization),
+        on.fileTools && FILESYSTEM_SYSTEM_PROMPT,
+        on.bash && BASH_SYSTEM_PROMPT,
+        on.planning && PLANNING_SYSTEM_PROMPT,
+      ]
         .filter(Boolean)
         .join('\n\n')
     )
   );
   // Tool calls are reported to whichever reply is being generated (see `send`).
-  // The workspace through the seven file tools, or through one bash tool.
-  const [fileTools] = useState(() => {
-    if (!toolsOn) return null;
-    if (!bashOn) return createFilesystemTools();
-    const bash = createBashTool();
-    return { tools: [bash.tool], setActivityListener: bash.setActivityListener };
+  const [toolSets] = useState(() => {
+    const bash = on.bash ? createBashTool() : null;
+    const planning = on.planning ? createPlanningTool() : null;
+    return [
+      on.fileTools ? createFilesystemTools() : null,
+      bash && { tools: [bash.tool], setActivityListener: bash.setActivityListener },
+      planning && { tools: [planning.tool], setActivityListener: planning.setActivityListener },
+    ].filter((s) => s !== null);
   });
-  const [planning] = useState(() => (planningOn ? createPlanningTool() : null));
   const [toolOpts] = useState(() =>
-    fileTools
+    toolSets.length
       ? {
-          tools: [...fileTools.tools, ...(planning ? [planning.tool] : [])],
+          tools: toolSets.flatMap((s) => s.tools),
           parseToolCalls: parseGemmaToolCalls,
           // Planning roughly doubles the calls (each step plus a checklist update).
-          maxToolTurns: planning ? 16 : 6,
+          maxToolTurns: on.planning ? 16 : 6,
         }
       : undefined
   );
@@ -399,8 +408,7 @@ export function ChatView({
       flush();
       if ((activity.name === 'open_file' || activity.opens) && activity.ok && activity.path) openFile(activity.path);
     };
-    fileTools?.setActivityListener(onActivity);
-    planning?.setActivityListener(onActivity);
+    toolSets.forEach((s) => s.setActivityListener(onActivity));
 
     let final: Message = reply;
     try {
@@ -447,8 +455,7 @@ export function ChatView({
         tools: tools.length ? tools : undefined,
       };
     } finally {
-      fileTools?.setActivityListener(null);
-      planning?.setActivityListener(null);
+      toolSets.forEach((s) => s.setActivityListener(null));
       if (flushTimer) clearTimeout(flushTimer);
       // Move the finished reply into the list in one update.
       setMessages((prev) => [...prev, final]);

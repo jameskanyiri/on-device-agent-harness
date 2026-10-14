@@ -20,7 +20,7 @@ export type HarnessConfig = {
   fileTools: boolean;
   /** The todo planning tool (src/harness/planning.ts) and its system prompt. Step 2. */
   planning?: boolean;
-  /** With fileTools, one bash tool (src/harness/bash.ts) instead of the seven file tools. Step 3a. */
+  /** One bash tool (src/harness/bash.ts) for the workspace; independent of fileTools. Step 3a. */
   bash?: boolean;
 };
 
