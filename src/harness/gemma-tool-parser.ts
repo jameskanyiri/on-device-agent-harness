@@ -99,11 +99,13 @@ function parseValue(s: string, i: number): { value: unknown; end: number } {
   if (c === '"') return parseJsonString(s, i);
   if (c === '{') return parseObject(s, i);
   if (c === '[') return parseArray(s, i);
-  // Bare scalar: runs to the next separator.
+  // Bare scalar: runs to the next separator. The model sometimes drops a string's opening
+  // delimiter (`pattern:/drafts/*.txt<|"|>}`), so a closing one also ends the value.
   let end = i;
-  while (end < s.length && !',}]'.includes(s[end]!)) end++;
+  while (end < s.length && !',}]'.includes(s[end]!) && !s.startsWith(STRING_DELIM, end)) end++;
   const raw = s.slice(i, end).trim();
   if (!raw) throw new Error('missing value');
+  if (s.startsWith(STRING_DELIM, end)) return { value: raw, end: end + STRING_DELIM.length };
   return { value: scalar(raw), end };
 }
 

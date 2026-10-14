@@ -27,6 +27,14 @@ describe('parseGemmaToolCalls', () => {
     expect(result?.toolCalls[0]!.function.arguments).toEqual({ content, file_path: '/x.md' });
   });
 
+  it('recovers a string whose opening delimiter was dropped', () => {
+    // Seen on the phone, 14 Oct: the delimiter ended up inside the glob pattern.
+    const result = parseGemmaToolCalls(call(`glob{pattern:/**/drafts/*.txt${Q}}`));
+    expect(result?.toolCalls[0]!.function.arguments).toEqual({ pattern: '/**/drafts/*.txt' });
+    const two = parseGemmaToolCalls(call(`read_file{file_path:/todo.md${Q},limit:20}`));
+    expect(two?.toolCalls[0]!.function.arguments).toEqual({ file_path: '/todo.md', limit: 20 });
+  });
+
   it('parses booleans, arrays and nested objects', () => {
     const result = parseGemmaToolCalls(call(`edit_file{replace_all:true,tags:[${Q}a${Q},2],opts:{deep:false}}`));
     expect(result?.toolCalls[0]!.function.arguments).toEqual({ replace_all: true, tags: ['a', 2], opts: { deep: false } });
