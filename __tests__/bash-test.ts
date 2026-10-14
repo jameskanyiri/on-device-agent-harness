@@ -108,6 +108,13 @@ describe('bash tool', () => {
     expect(await sh('cat /reminders/dentist.txt')).toBe('Reminder: dentist on the 14th at 9am');
   });
 
+  it('echo turns \\n into a new line, as zsh does (drafts-index, 14 Oct)', async () => {
+    const { sh } = await setup();
+    await sh(`echo "# Draft Index\\n\\n- ideas.txt: plants" > /drafts/index.md`);
+    expect(await sh('cat /drafts/index.md')).toBe('# Draft Index\n\n- ideas.txt: plants');
+    expect(await sh(`echo -E 'a\\nb'`)).toBe('a\\nb');
+  });
+
   it('won’t overwrite a file it hasn’t read, as edit_file won’t', async () => {
     const { sh } = await setup();
     expect(await sh(`echo '- [x] Book dentist' > /todo.md`)).toBe(

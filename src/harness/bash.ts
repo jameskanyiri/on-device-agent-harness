@@ -499,12 +499,14 @@ export function createBashTool({ root = WORKSPACE_DIR }: { root?: string } = {})
       return { out: unlines(out), err, code: err ? 1 : 0 };
     },
 
+    // Like zsh's and sh's echo (not bash's): \n and \t are turned into a new line and a tab
+    // unless -E is given. Gemma writes `echo "a\nb" > file` expecting two lines (step3a-smoke).
     echo: async (args) => {
       let n = false;
-      let e = false;
-      while (/^-[ne]+$/.test(args[0] ?? '')) {
+      let e = true;
+      while (/^-[neE]+$/.test(args[0] ?? '')) {
         n ||= args[0]!.includes('n');
-        e ||= args[0]!.includes('e');
+        if (args[0]!.includes('E')) e = false;
         args = args.slice(1);
       }
       const text = args.join(' ');
