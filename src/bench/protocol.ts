@@ -60,6 +60,17 @@ export type Job = {
   cooldown: { settleMs: number; maxWaitMs: number; stableMs?: number };
   /** A turn running longer than this is stopped and the run recorded as timed out. */
   turnTimeoutMs?: number;
+  /**
+   * Before the measured session, load the model in a throwaway session and generate a few
+   * tokens, so the first read after the app opens (weights paged in from flash) isn't
+   * counted in turn 1. Recorded in `RunResult.warmup`.
+   */
+  warmup?: boolean;
+  /**
+   * Model calls allowed per user message with tools on, the final answer included (the
+   * chat uses 6). Multi-step tasks need 5+, and a planning tool adds calls of its own.
+   */
+  maxToolTurns?: number;
 };
 
 export type JobResponse = Job | { type: 'done' };
@@ -137,7 +148,14 @@ export type RunResult = {
   endedAt: number;
   cooldownMs: number;
   /** Phase boundaries (ms since epoch) for slicing the samples. */
-  phases: { idleStart: number; loadStart?: number; loadEnd?: number; turnsEnd?: number };
+  phases: { idleStart: number; warmupStart?: number; loadStart?: number; loadEnd?: number; turnsEnd?: number };
+  /** The throwaway warm-up session (when `Job.warmup`): how cold the model was. */
+  warmup?: {
+    loadMs: number;
+    /** Send → first token: mostly the one-off first-read cost when the model was cold. */
+    firstTokenWallMs?: number;
+    totalMs: number;
+  };
   load?: {
     sessionCreateMs: number;
     /** Tokens in the KV cache before the first user message: system prompt + tool declarations. */

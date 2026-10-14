@@ -107,6 +107,13 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     phase('idle baseline', 'idle');
     await sleep(job.idleMs);
 
+    if (job.warmup) {
+      log(`Warming up ${model.name}`);
+      phase('warm-up', 'load');
+      result.phases.warmupStart = Date.now();
+      result.warmup = await warmUp(config);
+    }
+
     const { harness } = job.scenario;
     const fileTools = harness.fileTools
       ? createFilesystemTools({ root: BENCH_WORKSPACE_DIR })
@@ -142,7 +149,7 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
       generationConfig: job.generation,
       initialMessages,
       toolOpts: fileTools
-        ? { tools: fileTools.tools, parseToolCalls: parseGemmaToolCalls, maxToolTurns: 6 }
+        ? { tools: fileTools.tools, parseToolCalls: parseGemmaToolCalls, maxToolTurns: job.maxToolTurns ?? 6 }
         : undefined,
       stopRegex: fileTools ? GEMMA_TOOL_STOP : undefined,
     });
@@ -247,6 +254,26 @@ export async function runJob(job: Job, log: (message: string) => void): Promise<
     result.endedAt = Date.now();
   }
   return result;
+}
+
+/**
+ * Loads the model in a throwaway session and generates a few tokens, then disposes it. The
+ * first read after the app opens pages the weights in from flash (seconds, not ms); doing it
+ * here keeps that out of the measured session's turn 1.
+ */
+async function warmUp(config: Parameters<typeof createLLMChatSession>[0]): Promise<NonNullable<RunResult['warmup']>> {
+  const start = Date.now();
+  const session = await createLLMChatSession(config, { generationConfig: { temperature: 0, maxNewTokens: 4 } });
+  const loaded = Date.now();
+  try {
+    let firstTokenAt: number | undefined;
+    await session.sendMessage('Hi', () => {
+      firstTokenAt ??= Date.now();
+    });
+    return { loadMs: loaded - start, firstTokenWallMs: firstTokenAt && firstTokenAt - loaded, totalMs: Date.now() - start };
+  } finally {
+    session.dispose();
+  }
 }
 
 function toGenerationRecord(s: llm.LLMGenerationStats): GenerationRecord {
